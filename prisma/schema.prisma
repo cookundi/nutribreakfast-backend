@@ -1,0 +1,397 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Company Management
+model Company {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  phone         String
+  address       String?
+  companyCode   String   @unique
+  password      String   // Added for company admin login
+  isActive      Boolean  @default(true)
+  
+  // Payment Settings
+  paymentModel  PaymentModel @default(COMPANY_PAYS_ALL)
+  subsidyPercent Int?     // If partial subsidy
+  
+  // Billing
+  billingDay    Int      @default(1) // Day of month for billing
+  
+  staff         Staff[]
+  orders        Order[]
+  invoices      Invoice[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Staff {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  password         String
+  name             String
+  phone            String?
+  staffCode        String   
+  role             UserRole @default(STAFF)  // Added role field
+  
+  // Company Relation
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  
+  // Health Profile
+  age              Int?
+  weight           Float?   // kg
+  height           Float?   // cm
+  gender           Gender?
+  bloodType        String?
+  
+  // Health Conditions & Restrictions
+  allergies        String[] // Array of allergens
+  medicalConditions String[] // Diabetes, Hypertension, etc
+  dietaryRestrictions String[] // Halal, Vegetarian, Vegan
+  
+  // Lifestyle
+  activityLevel    ActivityLevel?
+  healthGoal       HealthGoal?
+  
+  // Preferences
+  dislikedFoods    String[]
+  preferredCuisines String[]
+  
+  // Account Status
+  isActive         Boolean  @default(true)
+  isOnboarded      Boolean  @default(false)
+  lastLogin        DateTime?
+  
+  orders           Order[]
+  healthLogs       HealthLog[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([companyId, staffCode])
+  @@index([email])
+  @@index([companyId])
+}
+
+// Meals & Nutrition
+model Meal {
+  id               String   @id @default(uuid())
+  name             String
+  description      String
+  category         MealCategory
+  cuisine          String   // Nigerian, Continental, etc
+  
+  // Nutrition Info (per serving)
+  calories         Int
+  protein          Float    // grams
+  carbs            Float
+  fats             Float
+  fiber            Float?
+  sugar            Float?
+  sodium           Float?   // mg
+  
+  // Ingredients & Allergens
+  ingredients      String[]
+  allergens        String[] // Nuts, Dairy, Gluten, etc
+  
+  // Pricing
+  basePrice        Int      // In Kobo (Nigerian smallest currency unit)
+  
+  // Availability
+  isAvailable      Boolean  @default(true)
+  availableDays    Int[]    // 0=Sunday, 1=Monday, etc
+  maxDailyCapacity Int?     // Kitchen capacity
+  
+  // Media
+  imageUrl         String?
+  
+  // Tags for AI matching
+  tags             String[] // high-protein, low-gi, heart-healthy, etc
+  suitableFor      String[] // diabetes, hypertension, weight-loss, etc
+  
+  orders           Order[]
+  inventory        InventoryItem[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([isAvailable])
+  @@index([category])
+}
+
+// Orders
+model Order {
+  id               String   @id @default(uuid())
+  orderNumber      String   @unique
+  
+  // Relations
+  staffId          String
+  staff            Staff    @relation(fields: [staffId], references: [id])
+  
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  
+  mealId           String
+  meal             Meal     @relation(fields: [mealId], references: [id])
+  
+  // Order Details
+  quantity         Int      @default(1)
+  price            Int      // In Kobo (price at time of order)
+  
+  // Delivery Info
+  deliveryDate     DateTime
+  deliveryAddress  String
+  deliveryTime     String?  // Preferred time window
+  
+  // Status Tracking
+  status           OrderStatus @default(PENDING)
+  
+  // Timestamps for each status
+  confirmedAt      DateTime?
+  preparingAt      DateTime?
+  outForDeliveryAt DateTime?
+  deliveredAt      DateTime?
+  cancelledAt      DateTime?
+  
+  // Rider Info
+  riderId          String?
+  riderName        String?
+  riderPhone       String?
+  
+  // Special Instructions
+  notes            String?
+  
+  // Payment
+  isPaid           Boolean  @default(false)
+  paidAt           DateTime?
+  invoiceId        String?
+  invoice          Invoice? @relation(fields: [invoiceId], references: [id])
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([staffId])
+  @@index([companyId])
+  @@index([deliveryDate])
+  @@index([status])
+}
+
+// Invoicing & Payments
+model Invoice {
+  id               String   @id @default(uuid())
+  invoiceNumber    String   @unique
+  
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  
+  // Billing Period
+  billingMonth     Int      // 1-12
+  billingYear      Int
+  
+  // Amounts (in Kobo)
+  subtotal         Int
+  tax              Int      @default(0)
+  discount         Int      @default(0)
+  total            Int
+  
+  // Payment Status
+  status           InvoiceStatus @default(PENDING)
+  dueDate          DateTime
+  paidAt           DateTime?
+  
+  // Payment Reference
+  paystackReference String?
+  
+  // Orders included
+  orders           Order[]
+  
+  // PDF
+  pdfUrl           String?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([companyId])
+  @@index([status])
+}
+
+// Health Tracking
+model HealthLog {
+  id               String   @id @default(uuid())
+  
+  staffId          String
+  staff            Staff    @relation(fields: [staffId], references: [id])
+  
+  weight           Float?
+  bloodPressure    String?  // "120/80"
+  bloodSugar       Float?   // mg/dL
+  notes            String?
+  
+  loggedAt         DateTime @default(now())
+  
+  @@index([staffId])
+  @@index([loggedAt])
+}
+
+// Kitchen Inventory
+model InventoryItem {
+  id               String   @id @default(uuid())
+  name             String
+  category         String   // Vegetables, Proteins, Grains, etc
+  unit             String   // kg, pieces, liters
+  
+  currentStock     Float
+  minimumStock     Float    // Alert threshold
+  
+  meals            Meal[]
+  
+  lastRestocked    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([currentStock])
+}
+
+// AI Recommendation Cache
+model RecommendationCache {
+  id               String   @id @default(uuid())
+  
+  staffId          String   @unique
+  
+  // Cached recommendations (JSON)
+  recommendations  Json     // Array of meal IDs with scores
+  
+  // Cache metadata
+  generatedAt      DateTime @default(now())
+  expiresAt        DateTime
+  
+  @@index([expiresAt])
+}
+
+// Notifications
+model Notification {
+  id               String   @id @default(uuid())
+  
+  // Recipient
+  recipientType    RecipientType // STAFF, COMPANY, ADMIN
+  recipientId      String
+  
+  // Content
+  title            String
+  message          String
+  type             NotificationType
+  
+  // Status
+  isRead           Boolean  @default(false)
+  readAt           DateTime?
+  
+  // Delivery channels
+  sentViaEmail     Boolean  @default(false)
+  sentViaSMS       Boolean  @default(false)
+  sentViaPush      Boolean  @default(false)
+  
+  createdAt        DateTime @default(now())
+  
+  @@index([recipientId, isRead])
+}
+
+// Admin Users
+model Admin {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  name          String
+  role          UserRole @default(SUPER_ADMIN)
+  isActive      Boolean  @default(true)
+  lastLogin     DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([email])
+}
+
+// Enums
+enum UserRole {
+  STAFF
+  COMPANY_ADMIN
+  SUPER_ADMIN
+}
+
+enum PaymentModel {
+  COMPANY_PAYS_ALL
+  STAFF_PAYS_ALL
+  SHARED_PERCENTAGE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum HealthGoal {
+  WEIGHT_LOSS
+  MUSCLE_GAIN
+  MAINTENANCE
+  HEART_HEALTH
+  DIABETES_MANAGEMENT
+  GENERAL_WELLNESS
+}
+
+enum MealCategory {
+  BREAKFAST
+  LUNCH
+  SNACK
+  BEVERAGE
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum RecipientType {
+  STAFF
+  COMPANY
+  ADMIN
+}
+
+enum NotificationType {
+  ORDER_CONFIRMATION
+  ORDER_STATUS
+  PAYMENT_DUE
+  PAYMENT_RECEIVED
+  DELIVERY_UPDATE
+  SYSTEM_ALERT
+  HEALTH_TIP
+}
