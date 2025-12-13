@@ -69,7 +69,7 @@ const requireOnboarding = (req, res, next) => {
 // Check if order cutoff time has passed
 const checkOrderCutoff = (req, res, next) => {
   const now = new Date();
-  const cutoffHour = parseInt(process.env.ORDER_CUTOFF_HOUR) || 16;
+  const cutoffHour = parseInt(process.env.ORDER_CUTOFF_HOUR) || 22;
   const cutoffMinute = parseInt(process.env.ORDER_CUTOFF_MINUTE) || 0;
   
   if (now.getHours() > cutoffHour || 
