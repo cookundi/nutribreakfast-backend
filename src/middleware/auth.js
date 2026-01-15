@@ -66,19 +66,44 @@ const requireOnboarding = (req, res, next) => {
   next();
 };
 
-// Check if order cutoff time has passed
+// src/middleware/auth.js
+
 const checkOrderCutoff = (req, res, next) => {
   const now = new Date();
-  const cutoffHour = parseInt(process.env.ORDER_CUTOFF_HOUR) || 22;
-  const cutoffMinute = parseInt(process.env.ORDER_CUTOFF_MINUTE) || 0;
+
+  // ROBUST LAGOS TIME CALCULATION (UTC + 1)
+  // 1. Get UTC hours and add 1
+  let lagosHour = now.getUTCHours() + 1;
   
-  if (now.getHours() > cutoffHour || 
-      (now.getHours() === cutoffHour && now.getMinutes() >= cutoffMinute)) {
-    return next(new AppError('Order cutoff time has passed. Orders close at 4:00 PM.', 400));
+  // 2. Handle Day Rollover (If UTC is 23 (11pm), Lagos is 24 (00:00am))
+  if (lagosHour >= 24) {
+    lagosHour = lagosHour - 24;
+  }
+  
+  const lagosMinute = now.getUTCMinutes();
+
+  // Get Env variables (Default to 11 PM if not set)
+  const cutoffHour = parseInt(process.env.ORDER_CUTOFF_HOUR) || 23; 
+  const cutoffMinute = parseInt(process.env.ORDER_CUTOFF_MINUTE) || 0;
+
+  console.log(`Server UTC: ${now.getUTCHours()}:${now.getUTCMinutes()}`);
+  console.log(`Lagos Time: ${lagosHour}:${lagosMinute}`);
+
+  // 3. LOGIC CHECK
+  // Case A: It's currently later than the cutoff hour (e.g., Current 24 > Cutoff 23)
+  // Note: 0 (Midnight) is NOT greater than 23, so midnight passes fine.
+  if (lagosHour > cutoffHour) {
+     return next(new AppError(`Order cutoff time has passed. Orders close at ${cutoffHour > 12 ? cutoffHour - 12 : cutoffHour}:00 PM.`, 400));
+  }
+
+  // Case B: It's the same hour, but minutes have passed
+  if (lagosHour === cutoffHour && lagosMinute >= cutoffMinute) {
+     return next(new AppError(`Order cutoff time has passed. Orders close at ${cutoffHour > 12 ? cutoffHour - 12 : cutoffHour}:00 PM.`, 400));
   }
   
   next();
 };
+
 
 module.exports = {
   protect,
